@@ -2,7 +2,7 @@ name: Backend CI Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-backend
