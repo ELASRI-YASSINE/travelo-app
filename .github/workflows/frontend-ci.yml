@@ -3,8 +3,6 @@ name: Frontend CI Pipeline
 on:
   push:
     branches: [main]
-    paths:
-      - 'travelo_frontend/**'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-frontend
