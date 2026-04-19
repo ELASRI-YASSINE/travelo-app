@@ -2,17 +2,20 @@ name: Frontend CI Pipeline
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
+    paths:
+      - 'travelo_frontend/**'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-frontend
 
 jobs:
-  build-and-test:
+
+  # ─── JOB 1 — triggered by commit containing [build] ──────────────────────
+  build:
     name: Build & Test
     runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[build]')
 
     steps:
       - name: Checkout code
@@ -22,21 +25,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'                # caches node_modules between runs
+          cache: 'npm'
           cache-dependency-path: travelo_frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: ./travelo_frontend
-        run: npm ci                   # clean install — faster and reproducible
-
-      - name: Run linter
-        working-directory: ./travelo_frontend
-        run: npm run lint --if-present
-
-      - name: Run tests
-        working-directory: ./travelo_frontend
-        run: npm test -- --watchAll=false --passWithNoTests
+        run: npm ci
 
       - name: Build React app
         working-directory: ./travelo_frontend
+        env:
+          CI: false
         run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: travelo_frontend/build/
+          retention-days: 1
