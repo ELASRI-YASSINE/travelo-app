@@ -1,0 +1,128 @@
+version: '3.9'
+
+networks:
+  travelo-network:
+    driver: overlay                    # Q13b — overlay for Swarm multi-node communication
+
+volumes:
+  mysql-data:
+
+services:
+
+  # ─── Traefik Reverse Proxy (Q17) ──────────────────────────────────────────
+  traefik:
+    image: traefik:v2.11
+    command:
+      - "--api.insecure=true"                        # enable dashboard on port 8080
+      - "--providers.docker=true"                    # read config from Docker labels
+      - "--providers.docker.swarmMode=true"          # tell Traefik we're in Swarm mode
+      - "--providers.docker.exposedbydefault=false"  # don't expose services unless labeled
+      - "--entrypoints.web.address=:80"              # listen on port 80
+    ports:
+      - "80:80"          # main HTTP traffic
+      - "8080:8080"      # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # read Docker events (read-only for security)
+    networks:
+      - travelo-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager     # Traefik must run on manager to read Swarm events
+      restart_policy:                # Q16
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:                     # Q15
+        limits:
+          cpus: '0.30'
+          memory: 128M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+
+  # ─── MySQL Database ────────────────────────────────────────────────────────
+  mysql-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: travelo
+      MYSQL_USER: travelo
+      MYSQL_PASSWORD: travelo123
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - travelo-network
+    deploy:
+      replicas: 1                    # Q14 — 1 replica for DB (standard MySQL not multi-master)
+      placement:
+        constraints:
+          - node.role == manager     # pin to manager where the volume lives
+      restart_policy:                # Q16
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+      resources:                     # Q15
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ─── Spring Boot Backend ───────────────────────────────────────────────────
+  backend:
+    image: travelo-backend:latest
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/travelo
+      SPRING_DATASOURCE_USERNAME: travelo
+      SPRING_DATASOURCE_PASSWORD: travelo123
+    networks:
+      - travelo-network
+    deploy:
+      replicas: 2                    # Q14 — 2 replicas for HA
+      restart_policy:                # Q16
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:                     # Q15
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      labels:                        # Q17 — Traefik routing rules
+        - "traefik.enable=true"
+        - "traefik.http.routers.backend.rule=Host(`travelo.local`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.backend.entrypoints=web"
+        - "traefik.http.services.backend.loadbalancer.server.port=8080"
+
+  # ─── React Frontend ────────────────────────────────────────────────────────
+  frontend:
+    image: travelo-frontend:latest
+    networks:
+      - travelo-network
+    deploy:
+      replicas: 2                    # Q14 — 2 replicas for HA
+      restart_policy:                # Q16
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:                     # Q15
+        limits:
+          cpus: '0.30'
+          memory: 128M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+      labels:                        # Q17 — Traefik routing rules
+        - "traefik.enable=true"
+        - "traefik.http.routers.frontend.rule=Host(`travelo.local`)"
+        - "traefik.http.routers.frontend.entrypoints=web"
+        - "traefik.http.services.frontend.loadbalancer.server.port=80"
