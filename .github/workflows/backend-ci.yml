@@ -27,11 +27,11 @@ jobs:
           cache: maven          # caches ~/.m2 between runs
 
       - name: Run tests
-        working-directory: ./backend
+        working-directory: ./travelo_backend
         run: mvn test -B
 
       - name: Build JAR
-        working-directory: ./backend
+        working-directory: ./travelo_backend
         run: mvn package -DskipTests -B
 
       - name: Upload JAR artifact

@@ -23,20 +23,20 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'                # caches node_modules between runs
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: travelo_frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./frontend
+        working-directory: ./travelo_frontend
         run: npm ci                   # clean install — faster and reproducible
 
       - name: Run linter
-        working-directory: ./frontend
+        working-directory: ./travelo_frontend
         run: npm run lint --if-present
 
       - name: Run tests
-        working-directory: ./frontend
+        working-directory: ./travelo_frontend
         run: npm test -- --watchAll=false --passWithNoTests
 
       - name: Build React app
-        working-directory: ./frontend
+        working-directory: ./travelo_frontend
         run: npm run build
