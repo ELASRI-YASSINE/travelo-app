@@ -105,3 +105,29 @@ jobs:
           exit-code: '0'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+  deploy:
+    name: Update image tag and trigger Argo CD
+    runs-on: ubuntu-latest
+    needs: docker
+    if: contains(github.event.head_commit.message, '[deploy]')
+
+    steps:
+      - name: Checkout k8s repo
+        uses: actions/checkout@v4
+
+      - name: Update image tag in deployment
+        run: |
+          # Get the short SHA of the commit
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+
+          # Replace the image tag in the manifest
+          sed -i "s|travelo-backend:.*|travelo-backend:sha-${SHA}|g" \
+            k8s/04-backend-deployment.yml
+
+      - name: Commit and push updated manifest
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add k8s/04-backend-deployment.yml
+          git commit -m "ci: update backend image to sha-${SHA}"
+          git push
