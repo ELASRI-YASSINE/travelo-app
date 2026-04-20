@@ -136,7 +136,7 @@ jobs:
 
           # Replace the image tag in the manifest
           sed -i "s|travelo-backend:.*|travelo-backend:sha-${SHA}|g" \
-            ~/travelo-app/k8s/04-backend-deployment.yml
+            /home/yassine/travelo-app/k8s/04-backend-deployment.yml
 
       - name: Commit and push updated manifest
         run: |
