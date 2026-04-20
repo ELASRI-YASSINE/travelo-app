@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: travelo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_USERNAME/travelo-app
+    targetRevision: main
+    path: k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: travelo
+  syncPolicy:
+    automated:
+      prune: true       # removes resources deleted from Git
+      selfHeal: true    # reverts manual kubectl changes
+    syncOptions:
+      - CreateNamespace=true
