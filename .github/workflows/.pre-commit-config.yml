@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: detect-private-key        # blocks hardcoded private keys
+      - id: check-merge-conflict
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint                  # lints Dockerfiles for best practices
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']

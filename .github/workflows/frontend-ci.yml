@@ -3,15 +3,28 @@ name: Frontend CI Pipeline
 on:
   push:
     branches: [main, develop]
+
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-frontend
 
 jobs:
 
-  # ─── JOB 1 — triggered by commit containing [build] ─────────────────────
+  # ─── JOB 0 — Pre-commit checks (Q2) ──────────────────────────────────────
+  pre-commit:
+    name: Pre-commit Checks
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[build]')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run pre-commit hooks
+        uses: pre-commit/action@v3.0.1
+
+  # ─── JOB 1 — triggered by [build] ────────────────────────────────────────
   build:
     name: Build & Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    needs: pre-commit
     if: contains(github.event.head_commit.message, '[build]')
 
     steps:
@@ -22,7 +35,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'npm'                            # Q1c — caches node_modules
           cache-dependency-path: travelo_frontend/package-lock.json
 
       - name: Install dependencies
@@ -42,47 +55,20 @@ jobs:
           path: travelo_frontend/build/
           retention-days: 1
 
-  # ─── JOB 2 — triggered by commit containing [docker] ────────────────────
+  # ─── JOB 2 — triggered by [docker] (uses reusable workflow Q1d) ──────────
   docker:
     name: Docker Build & Push
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/reusable-docker.yml   # Q1d — reusable job
     if: contains(github.event.head_commit.message, '[docker]')
+    with:
+      context: ./travelo_frontend
+      image_name: ${{ vars.DOCKERHUB_USERNAME }}/travelo-frontend
+    secrets: inherit
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: ./travelo_frontend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ─── JOB 3 — triggered by commit containing [scan] ──────────────────────
+  # ─── JOB 3 — triggered by [scan] ─────────────────────────────────────────
   scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
+    name: Container Security Scan
+    runs-on: self-hosted
     if: contains(github.event.head_commit.message, '[scan]')
 
     steps:
@@ -107,10 +93,10 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
-  # ─── JOB 4 — triggered by commit containing [deploy] ────────────────────
+  # ─── JOB 4 — triggered by [deploy] ───────────────────────────────────────
   deploy:
     name: Update image tag for Argo CD
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: contains(github.event.head_commit.message, '[deploy]')
 
     steps:
@@ -122,7 +108,6 @@ jobs:
       - name: Update frontend image tag
         run: |
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "Updating image tag to sha-${SHA}"
           sed -i "s|image: .*/travelo-frontend:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-frontend:sha-${SHA}|g" \
             k8s/05-frontend-deployment.yml
           echo "Result:"
