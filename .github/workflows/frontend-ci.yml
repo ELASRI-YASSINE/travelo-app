@@ -3,13 +3,16 @@ name: Frontend CI Pipeline
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'travelo_frontend/**'
+      - 'k8s/**'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-frontend
 
 jobs:
 
-  # ─── JOB 1 — triggered by commit containing [build] ──────────────────────
+  # ─── JOB 1 — triggered by commit containing [build] ─────────────────────
   build:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -42,7 +45,8 @@ jobs:
           name: frontend-build
           path: travelo_frontend/build/
           retention-days: 1
-   # ─── JOB 2 — triggered by commit containing [docker] ─────────────────────
+
+  # ─── JOB 2 — triggered by commit containing [docker] ────────────────────
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
@@ -78,7 +82,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-  # ─── JOB 3 — triggered by commit containing [scan] ───────────────────────
+
+  # ─── JOB 3 — triggered by commit containing [scan] ──────────────────────
   scan:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -105,29 +110,33 @@ jobs:
           exit-code: '0'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+
+  # ─── JOB 4 — triggered by commit containing [deploy] ────────────────────
   deploy:
-    name: Update image tag and trigger Argo CD
+    name: Update image tag for Argo CD
     runs-on: ubuntu-latest
-    needs: docker
     if: contains(github.event.head_commit.message, '[deploy]')
 
     steps:
-      - name: Checkout k8s repo
+      - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update image tag in deployment
+      - name: Update frontend image tag
         run: |
-          # Get the short SHA of the commit
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "Updating image tag to sha-${SHA}"
+          sed -i "s|image: .*/travelo-frontend:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/travelo-frontend:sha-${SHA}|g" \
+            k8s/05-frontend-deployment.yml
+          echo "Result:"
+          grep "image:" k8s/05-frontend-deployment.yml
 
-          # Replace the image tag in the manifest
-          sed -i "s|travelo-backend:.*|travelo-backend:sha-${SHA}|g" \
-            /home/yassine/travelo-app/k8s/04-frontend-deployment.yml
-
-      - name: Commit and push updated manifest
+      - name: Commit and push
         run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add k8s/04-backend-deployment.yml
-          git commit -m "ci: update backend image to sha-${SHA}"
+          git add k8s/05-frontend-deployment.yml
+          git diff --staged --quiet || git commit -m "ci: update frontend image to sha-${SHA} [skip ci]"
           git push
